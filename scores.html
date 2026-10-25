@@ -54,10 +54,6 @@ h1 { text-align: center; font-size: 32px; margin-bottom: 16px; }
 const scheduleCsvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLoCV49CaRygsWb5Z8eMudI9MTtipvqBoMYTfWUyz26k-oUF6R331QTzvTynP8zc94_4BvaVkYt7Kh/pub?output=csv';
 const rosterCsvUrl   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQYhnOOhIqxpnGxpC24R4lUF_-K5E_OJ_JvXDFJSmEMEI3j52pSJFSdiJtbeJEhspP-52j0bG0mxLwa/pub?output=csv';
 
-// Karma now comes from a column in the roster sheet.
-// Add a column named "karma" (lowercase) to the roster sheet and fill in each player's score.
-const KARMA_COLUMN = 'karma';
-
 // === HELPERS ===
 function getTodayString() {
   const now = new Date();
@@ -67,10 +63,11 @@ function getTodayString() {
 }
 
 function parseCSV(text) {
+  const clean = s => s.replace(/^\uFEFF/, '').replace(/^"|"$/g, '').trim();
   const lines = text.trim().split(/\r?\n/);
-  const headers = lines[0].split(',').map(h => h.trim());
+  const headers = lines[0].split(',').map(clean);
   return lines.slice(1).map(line => {
-    const values = line.split(',').map(p => p.trim());
+    const values = line.split(',').map(clean);
     const obj = {};
     headers.forEach((h, i) => obj[h] = values[i]);
     return obj;
@@ -81,9 +78,15 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-// Returns the player's karma from the sheet, or null if the cell is empty / not a number.
+// Finds any column with "karma" in its name, any capitalization
+function findKarmaKey(row) {
+  return Object.keys(row).find(k => k.toLowerCase().includes('karma'));
+}
+
+// Returns the player's karma from the sheet, or null if empty / not a number
 function readKarma(p) {
-  const raw = p[KARMA_COLUMN];
+  const key = findKarmaKey(p);
+  const raw = key ? p[key] : undefined;
   if (raw === undefined || raw === '') return null;
   const n = parseFloat(raw);
   return Number.isNaN(n) ? null : n;
@@ -153,9 +156,9 @@ async function loadGames() {
 
     const rosterRows = parseCSV(rosterRes.data);
 
-    // Fail loudly if the sheet doesn't have the karma column yet
-    if (rosterRows.length && !(KARMA_COLUMN in rosterRows[0])) {
-      loading.textContent = `Roster sheet is missing a "${KARMA_COLUMN}" column.`;
+    // Fail loudly, and show the real column names, if no karma column is found
+    if (rosterRows.length && !findKarmaKey(rosterRows[0])) {
+      loading.textContent = `No column with "karma" in its name. Columns found: ${Object.keys(rosterRows[0]).join(', ')}`;
       loading.classList.add('error');
       return;
     }
